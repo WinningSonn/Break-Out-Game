@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en-US">
+    <head>
+        <meta charset=""utf-8 />
+        <title>Simple Honkai Themed Break Out Game</title>
+        <style>
+            * {
+              padding: 0;
+              margin: 0;
+            }
+          </style>
+          <script src="js/phaser.min.js"></script>
+        </head>
+        <body>
+          <script>
+            const game = new Phaser.Game(480, 320, Phaser.CANVAS, null, {
+              preload,
+              create,
+              update,
+            });
+
+            var ball;
+            var paddle;
+            var bricks;
+            var newBrick;
+            var brickInfo;
+            var scoreText;
+            var score = 0;
+            var lives = 3;
+            var livesText;
+            var lifeLostText;
+            var playing = false;
+            var startButton;
+            var rotationSpeed = 2; // Adjust this value to change the rotation speed
+
+            // Sound variables
+            var paddleHitSound;
+            var brickHitSound;
+            var bgm;
+
+            // Level
+            var level = 1;
+            var hitsToBreakBrick = 1;
+            var levelText;
+
+            function preload() {
+                game.scale.scaleMode = Phaser.ScaleManager.SHOW_ALL;
+                game.scale.pageAlignHorizontally = true;
+                game.scale.pageAlignVertically = true;
+                game.stage.backgroundColor = "black";
+                game.load.image("ball", "img/bronyahead.png");
+                game.load.image("paddle", "img/honkaipaddle.png");
+                game.load.image("brick", "img/sentibrick.png");
+                //game.load.spritesheet("ball", "img/wobble.png", 20, 20);
+                game.load.spritesheet("button", "img/button.png", 120, 40);
+                // Load sound effects
+                game.load.audio('paddleHit', 'sound/bounce.mp3');
+                game.load.audio('brickHit', 'sound/hit.mp3');
+                game.load.audio('bgm', 'sound/bgm.mp3');
+
+            }
+            function create() {
+                // Play background music
+                bgm = game.add.audio('bgm'); // Create the audio object
+                bgm.loop = true; // Loop the background music
+                bgm.play(); // Play the background music
+
+                // Initialize sound effects
+                paddleHitSound = game.add.audio('paddleHit');
+                brickHitSound = game.add.audio('brickHit');
+                //Ball
+                game.physics.startSystem(Phaser.Physics.ARCADE);
+                ball = game.add.sprite(game.world.width*0.5, game.world.height-25, 'ball');
+                //ball.animations.add("wobble", [0,1,0,2,0,1,0,2,0], 24)
+                ball.anchor.set(0.5);
+                game.physics.enable(ball, Phaser.Physics.ARCADE);
+                ball.scale.set(0.07);
+                ball.body.velocity.set(0, 0);
+                ball.body.collideWorldBounds = true;
+                ball.body.bounce.set(1);
+
+                //Paddle
+                paddle = game.add.sprite(
+                    game.world.width * 0.5,
+                    game.world.height -5,
+                    "paddle",
+                );
+                paddle.anchor.set(0.5,1);
+                game.physics.enable(paddle, Phaser.Physics.ARCADE);
+                paddle.body.immovable = true;
+                game.renderer.renderSession.roundPixels = true;
+                // Set the paddle's width directly
+                paddle.width = 120; // Set this to your desired width
+                paddle.height = 20; // You can also set the height if needed
+
+
+                //Events
+                game.physics.arcade.checkCollision.down = false;
+                ball.checkWorldBounds = true;
+                ball.events.onOutOfBounds.add(ballLeaveScreen, this);
+                initBricks();
+
+                textStyle = { font: '18px Arial', fill: '#0095DD'};
+
+                scoreText = game.add.text(5, 5, "Points: 0", textStyle);
+                livesText = game.add.text(game.world.width - 5, 5, `Lives: ${lives}`, textStyle);
+                livesText.anchor.set(1, 0);
+                lifeLostText = game.add.text(
+                game.world.width * 0.5,
+                game.world.height * 0.5,
+                "Life lost, click to continue",
+                textStyle
+                );
+                lifeLostText.anchor.set(0.5);
+                lifeLostText.visible = false;
+
+                //Start Button
+                startButton = game.add.button(
+                game.world.width * 0.5,
+                game.world.height * 0.5,
+                "button",
+                startGame,
+                this,
+                1,
+                0,
+                2,
+                );
+                startButton.anchor.set(0.5);
+
+                // Initialize level display
+                levelText = game.add.text(game.world.width * 0.5, 30, `Level: ${level}`, textStyle);
+                levelText.anchor.set(0.5, 0.5);
+
+            }
+            function update() {
+                if (playing) {
+                    game.physics.arcade.collide(ball, paddle, ballHitPaddle);
+                    game.physics.arcade.collide(ball, bricks, ballHitBrick);
+                    paddle.x = game.input.x || game.world.width * 0.5;
+
+                     // Rotate the ball
+                     ball.angle += rotationSpeed; // Increment the angle for rotation
+
+
+                    // Check if the ball is out of bounds
+                    if (ball.y > game.world.height) {
+                        ballLeaveScreen();
+                    }
+                }
+            }
+
+            //Bricks
+            function initBricks() {
+                    brickInfo = {
+                        width: 50,
+                        height: 20,
+                        count: {
+                        row: 3,
+                        col: 7,
+                        },
+                        offset: {
+                        top: 50,
+                        left: 60,
+                        },
+                        padding: 10,
+                    };
+                    bricks = game.add.group();
+                    for (let c = 0; c < brickInfo.count.col; c++) {
+                        for (let r = 0; r < brickInfo.count.row; r++) {
+                        const brickX =
+                            c * (brickInfo.width + brickInfo.padding) + brickInfo.offset.left;
+                        const brickY =
+                            r * (brickInfo.height + brickInfo.padding) + brickInfo.offset.top;
+                        newBrick = game.add.sprite(brickX, brickY, "brick");
+                        game.physics.enable(newBrick, Phaser.Physics.ARCADE);
+                        newBrick.body.immovable = true;
+                        newBrick.anchor.set(0.5);
+                        bricks.add(newBrick);
+                        }
+                    }
+                }
+                function ballHitBrick(ball, brick) {
+                // Increment the hit count for this brick
+                brick.hits = (brick.hits || 0) + 1;
+
+                // Check if the brick can be broken
+                if (brick.hits < hitsToBreakBrick) {
+                    return; // Exit if the brick is not ready to be broken
+                }
+
+                const killTween = game.add.tween(brick.scale);
+                killTween.to({ x: 0, y: 0 }, 200, Phaser.Easing.Linear.None);
+                killTween.onComplete.addOnce(() => {
+                    brick.kill();
+                    
+                    // Check for remaining alive bricks here
+                    let count_alive = 0;
+                    for (let i = 0; i < bricks.children.length; i++) {
+                        if (bricks.children[i].alive) {
+                            count_alive++;
+                        }
+                    }
+                    if (count_alive === 0) {
+                        level++; // Increase level
+                        // Update hits required per brick based on the current level
+                        hitsToBreakBrick = Math.floor((level - 1) / 5) + 1; // 1 for levels 1-5, 2 for 6-10, etc.
+                        ball.body.velocity.x *= 1.1; // Increase ball speed
+                        ball.body.velocity.y *= 1.1; // Increase ball speed
+                        levelText.setText(`Level: ${level}`); // Update level display
+                        alert("You won the round! Proceeding to the next level.");
+                        initBricks(); // Reinitialize bricks for the next level
+                    }
+                }, this);
+                killTween.start();
+                score += 10;
+                scoreText.setText(`Points: ${score}`);
+                // Play brick hit sound
+                brickHitSound.play();
+            }
+            function ballLeaveScreen() {
+                if (playing) { // Check if the game is currently being played
+                    lives--;
+                    if (lives) {
+                        livesText.setText('Lives: ' + lives);
+                        lifeLostText.visible = true;
+                        ball.reset(game.world.width * 0.5, game.world.height - 25);
+                        paddle.reset(game.world.width * 0.5, game.world.height - 5);
+                        game.input.onDown.addOnce(function() {
+                            lifeLostText.visible = false;
+                            ball.body.velocity.set(150, -150);
+                        }, this);
+                    } else {
+                        // Reset level and other variables
+                        level = 1; // Reset level
+                        hitsToBreakBrick = 1; // Reset hits required per brick
+            ball.body.velocity.set(0, 0); // Stop the ball
+                        levelText.setText(`Level: ${level}`); // Reset level display
+                        alert('You lost, game over! Restarting from level 1.');
+                        location.reload();
+                    }
+                }
+            }
+                        /*function ballHitPaddleOriginal(ball, paddle) {
+                ball.animations.play("wobble");
+            }*/
+
+            function ballHitPaddle(ball, paddle) {
+                ball.body.velocity.x = -5 * (paddle.x - ball.x);
+                // Play paddle hit sound
+                paddleHitSound.play();
+                }
+
+                function startGame() {
+                    startButton.destroy();
+                    // Resume the audio context
+                    if (bgm.context.state === 'suspended') {
+                        bgm.context.resume();
+                    }
+                    ball.body.velocity.set(150, -150);
+                    playing = true;
+                }
+          </script>
+        </body>
+    </head>
+</html>
