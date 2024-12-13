@@ -24,3 +24,5 @@ This is a simple Honkai themed Break Out game built using JavaScript and Phaser 
    ```bash
    git clone https://github.com/winningSonn/break-out-game.git
    cd break-out-game
+   NPM install
+   NPM start
